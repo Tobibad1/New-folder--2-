@@ -1,120 +1,175 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useEffect, useState } from 'react'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [tasks, setTasks] = useState([])
+  const [newTitle, setNewTitle] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const apiBase = import.meta.env.VITE_API_URL || '/api'
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    const fetchTasks = async () => {
+      try {
+        const response = await fetch(`${apiBase}/tasks`, {
+          signal: controller.signal
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to load tasks from backend')
+        }
+
+        const data = await response.json()
+        setTasks(data)
+      } catch (fetchError) {
+        if (fetchError.name !== 'AbortError') {
+          setError(fetchError.message)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTasks()
+
+    return () => {
+      controller.abort()
+    }
+  }, [apiBase])
+
+  const createTask = async (event) => {
+    event.preventDefault()
+
+    if (!newTitle.trim()) {
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      setError('')
+
+      const response = await fetch(`${apiBase}/tasks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: newTitle.trim(),
+          completed: false
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create task')
+      }
+
+      const createdTask = await response.json()
+      setTasks((prevTasks) => [createdTask, ...prevTasks])
+      setNewTitle('')
+    } catch (createError) {
+      setError(createError.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const toggleTask = async (task) => {
+    try {
+      setError('')
+
+      const response = await fetch(`${apiBase}/tasks/${task._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ completed: !task.completed })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update task')
+      }
+
+      const updatedTask = await response.json()
+      setTasks((prevTasks) =>
+        prevTasks.map((currentTask) =>
+          currentTask._id === updatedTask._id ? updatedTask : currentTask
+        )
+      )
+    } catch (updateError) {
+      setError(updateError.message)
+    }
+  }
+
+  const deleteTask = async (taskId) => {
+    try {
+      setError('')
+
+      const response = await fetch(`${apiBase}/tasks/${taskId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete task')
+      }
+
+      setTasks((prevTasks) => prevTasks.filter((task) => task._id !== taskId))
+    } catch (deleteError) {
+      setError(deleteError.message)
+    }
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
+    <main className="task-app">
+      <header className="task-header">
+        <h1>Task Board</h1>
+        <p>Frontend is now connected to your backend API.</p>
+      </header>
+
+      <form className="task-form" onSubmit={createTask}>
+        <input
+          type="text"
+          value={newTitle}
+          onChange={(event) => setNewTitle(event.target.value)}
+          placeholder="Write a task title"
+        />
+        <button type="submit" disabled={submitting}>
+          {submitting ? 'Adding...' : 'Add Task'}
         </button>
-      </section>
+      </form>
 
-      <div className="ticks"></div>
+      {error ? <p className="task-error">{error}</p> : null}
+      {loading ? <p className="task-state">Loading tasks...</p> : null}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      {!loading && tasks.length === 0 ? (
+        <p className="task-state">No tasks yet. Add your first one.</p>
+      ) : null}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      <ul className="task-list">
+        {tasks.map((task) => (
+          <li key={task._id} className="task-item">
+            <label>
+              <input
+                type="checkbox"
+                checked={Boolean(task.completed)}
+                onChange={() => toggleTask(task)}
+              />
+              <span className={task.completed ? 'done' : ''}>{task.title}</span>
+            </label>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => deleteTask(task._id)}
+            >
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
+    </main>
   )
 }
 

@@ -2,6 +2,7 @@ require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
 const uri = process.env.MONGODB_URI;
+const fallbackUri = process.env.MONGODB_URI_FALLBACK;
 const dbName = process.env.MONGODB_DB || "my_app_db";
 
 if (!uri) {
@@ -38,13 +39,40 @@ const connectDB = async () => {
 		dbConnectionError = null;
 		return database;
 	} catch (error) {
-		dbConnectionError = error;
-
 		if (error.message && error.message.includes("querySrv ECONNREFUSED")) {
 			console.error(
 				"Atlas DNS lookup failed. Check internet/DNS or use a non-SRV mongodb:// URI."
 			);
 		}
+
+		if (fallbackUri) {
+			try {
+				if (client) {
+					await client.close();
+				}
+
+				client = new MongoClient(fallbackUri, {
+					serverApi: {
+						version: ServerApiVersion.v1,
+						strict: true,
+						deprecationErrors: true
+					}
+				});
+
+				await client.connect();
+				database = client.db(dbName);
+				await database.command({ ping: 1 });
+
+				console.log(`MongoDB connected using fallback URI: ${dbName}`);
+				dbConnectionError = null;
+				return database;
+			} catch (fallbackError) {
+				dbConnectionError = fallbackError;
+				throw fallbackError;
+			}
+		}
+
+		dbConnectionError = error;
 
 		throw error;
 	}
